@@ -1,0 +1,82 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: rw3p-db
+    environment:
+      POSTGRES_USER: rw3p
+      POSTGRES_PASSWORD: rw3p
+      POSTGRES_DB: rw3p
+    ports:
+      - "6543:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rw3p -d rw3p"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: rw3p-backend
+    environment:
+      DATABASE_URL: postgres://rw3p:rw3p@db:5432/rw3p
+      RUST_LOG: info
+      RPC_URL: http://host.docker.internal:8545   # 本機 hardhat node
+      ROLE_MANAGER_ADDRESS: ${ROLE_MANAGER_ADDRESS}  # 從 .env 傳入
+    ports:
+      - "8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build: ./frontend
+    container_name: rw3p-frontend
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:8081
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # 可選：hardhat 本機鏈（也可以單獨在 contracts/ 用 npm script 跑）
+  hardhat:
+    image: node:22-alpine
+    container_name: rw3p-hardhat
+    working_dir: /app
+    volumes:
+      - ./contracts:/app
+    command: ["npx", "hardhat", "node", "--hostname", "0.0.0.0", "--port", "8545"]
+    ports:
+      - "8545:8545"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rw3p-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rw3p-grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  db-data:

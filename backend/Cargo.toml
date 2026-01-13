@@ -1,0 +1,4 @@
+[workspace]
+members = ["api", "domain", "auth", "indexer", "strategy_engine", "alert_engine"]
+
+resolver = "2"

@@ -1,0 +1,45 @@
+# Rust build artifacts
+backend/target
+**/target
+
+# Node modules
+frontend/node_modules
+**/node_modules
+
+# Next.js output
+frontend/.next
+frontend/out
+frontend/dist
+frontend/.turbo
+frontend/.vercel
+
+# Git repo (Docker 不需要)
+.git
+.gitignore
+
+# Lockfiles are okay (do NOT ignore these)
+# Cargo.lock
+# pnpm-lock.yaml
+
+# MacOS / OS files
+.DS_Store
+
+# IDE
+.vscode
+.idea
+*.iml
+
+# Logs
+*.log
+
+# Env files
+.env
+.env.*
+!**/.env.example
+
+# Docker junk
+*.pid
+
+# Local files you don't want inside containers
+**/*.swp
+**/*.swo

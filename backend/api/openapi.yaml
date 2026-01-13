@@ -1,0 +1,495 @@
+openapi: 3.0.3
+info:
+  title: Rust Web3 Risk Platform API
+  version: "0.1.0"
+  description: >
+    Minimal reference for the Axum API surface, including auth (SIWE),
+    wallets, strategies/backtests, and portfolio endpoints. Authenticated
+    endpoints accept either Authorization bearer tokens or the httpOnly
+    cookies issued during login.
+servers:
+  - url: http://localhost:8081
+paths:
+  /healthz:
+    get:
+      summary: Liveness check
+      responses:
+        "200":
+          description: API is ready
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/auth/nonce:
+    get:
+      summary: Issue a short-lived SIWE nonce
+      responses:
+        "200":
+          description: Nonce issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NonceResponse"
+  /api/auth/login:
+    post:
+      summary: Verify SIWE payload and start a session
+      description: >
+        Sets `rw3p_token`/`rw3p_role` httpOnly cookies and returns the role.
+        Accepts Authorization bearer tokens on subsequent calls.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccess"
+        "401":
+          description: Invalid SIWE payload or signature
+  /api/auth/logout:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Revoke the current session and clear cookies
+      responses:
+        "204":
+          description: Session revoked
+  /api/auth/refresh:
+    post:
+      summary: Refresh access/refresh tokens using the refresh cookie
+      responses:
+        "200":
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginSuccess"
+        "401":
+          description: Missing or invalid refresh cookie
+  /api/me:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Get the current user's profile and wallets
+      responses:
+        "200":
+          description: Profile found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "404":
+          description: User not found
+  /api/wallets:
+    get:
+      security:
+        - bearerAuth: []
+      summary: List wallets for the current user
+      responses:
+        "200":
+          description: Wallets listed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Wallet"
+    post:
+      security:
+        - bearerAuth: []
+      summary: Create a wallet for the current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWalletRequest"
+      responses:
+        "200":
+          description: Wallet created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+  /api/wallets/{wallet_id}:
+    delete:
+      security:
+        - bearerAuth: []
+      summary: Delete a wallet owned by the current user
+      parameters:
+        - in: path
+          name: wallet_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Wallet not found
+  /api/wallets/{wallet_id}/primary:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Promote a wallet to primary for the current user
+      parameters:
+        - in: path
+          name: wallet_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "204":
+          description: Primary wallet updated
+        "403":
+          description: Wallet does not belong to the user
+  /api/strategies:
+    get:
+      security:
+        - bearerAuth: []
+      summary: List strategies owned by the user
+      responses:
+        "200":
+          description: Strategies listed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Strategy"
+    post:
+      security:
+        - bearerAuth: []
+      summary: Create a new strategy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStrategyRequest"
+      responses:
+        "200":
+          description: Strategy created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Strategy"
+  /api/strategies/{strategy_id}/backtest:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Run a moving-average backtest for a strategy
+      parameters:
+        - in: path
+          name: strategy_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BacktestRequest"
+      responses:
+        "200":
+          description: Backtest completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BacktestResult"
+        "404":
+          description: Strategy not found
+  /api/portfolio/{wallet_id}:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Retrieve the latest portfolio snapshot
+      parameters:
+        - in: path
+          name: wallet_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          description: Snapshot returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioSnapshot"
+        "404":
+          description: Wallet not found
+  /api/portfolio/{wallet_id}/history:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Retrieve portfolio history
+      parameters:
+        - in: path
+          name: wallet_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: query
+          name: limit
+          description: Maximum entries to return (default 50, max 500)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        "200":
+          description: History returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortfolioSnapshot"
+        "404":
+          description: Wallet not found
+  /api/portfolio/{wallet_id}/snapshots:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Retrieve portfolio snapshots within days
+      parameters:
+        - in: path
+          name: wallet_id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: query
+          name: days
+          description: How many days to include (default 7, max 30)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+      responses:
+        "200":
+          description: Snapshots returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortfolioSnapshot"
+        "404":
+          description: Wallet not found
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    NonceResponse:
+      type: object
+      properties:
+        nonce:
+          type: string
+      required:
+        - nonce
+    LoginRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Raw SIWE message
+        signature:
+          type: string
+          description: Hex-encoded ECDSA signature
+      required:
+        - message
+        - signature
+    LoginSuccess:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+      required:
+        - role
+    Role:
+      type: integer
+      format: int32
+      description: "Role encoded as u8: 0=None, 1=Admin, 2=Viewer"
+      enum:
+        - 0
+        - 1
+        - 2
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        address:
+          type: string
+        chain_id:
+          type: integer
+          format: int64
+      required:
+        - id
+        - address
+        - chain_id
+    CreateWalletRequest:
+      type: object
+      properties:
+        address:
+          type: string
+        chain_id:
+          type: integer
+          format: int64
+      required:
+        - address
+        - chain_id
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        primary_wallet:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        wallets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Wallet"
+      required:
+        - id
+        - primary_wallet
+        - role
+        - wallets
+    Strategy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+      required:
+        - id
+        - user_id
+        - name
+        - type
+        - params
+    CreateStrategyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+      required:
+        - name
+        - type
+        - params
+    BacktestRequest:
+      type: object
+      properties:
+        prices:
+          type: array
+          items:
+            $ref: "#/components/schemas/PricePoint"
+        short_window:
+          type: integer
+        long_window:
+          type: integer
+    BacktestResult:
+      type: object
+      properties:
+        strategy_id:
+          type: string
+          format: uuid
+        equity_curve:
+          type: array
+          description: "[timestamp, equity] tuples"
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              equity:
+                type: number
+            required:
+              - timestamp
+              - equity
+        metrics:
+          type: object
+          additionalProperties: true
+      required:
+        - strategy_id
+        - equity_curve
+        - metrics
+    PricePoint:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        price:
+          type: number
+      required:
+        - timestamp
+        - price
+    PortfolioSnapshot:
+      type: object
+      properties:
+        wallet_id:
+          type: string
+          format: uuid
+        positions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Position"
+        total_usd_value:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+      required:
+        - wallet_id
+        - positions
+        - total_usd_value
+        - timestamp
+    Position:
+      type: object
+      properties:
+        asset_symbol:
+          type: string
+        amount:
+          type: number
+        usd_value:
+          type: number
+      required:
+        - asset_symbol
+        - amount
+        - usd_value

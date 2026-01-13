@@ -1,0 +1,21 @@
+# Build artifacts
+/target
+**/target
+!Cargo.lock
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# IDE / OS
+.DS_Store
+.idea
+.vscode
+*.iml
+
+# Other
+*.pid
