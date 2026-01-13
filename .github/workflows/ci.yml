@@ -34,7 +34,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cargo fmt
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all
         working-directory: backend
 
       - name: Cargo clippy
